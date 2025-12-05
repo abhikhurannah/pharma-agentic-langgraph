@@ -1,3 +1,4 @@
+from mangum import Mangum
 import sys
 import os
 
@@ -6,6 +7,5 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.main import app
 
-# Vercel expects a variable called 'app' or 'application'
-application = app
-handler = app
+# Vercel expects a handler that works with AWS Lambda format
+handler = Mangum(app, lifespan="off")
