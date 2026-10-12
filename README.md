@@ -1,291 +1,130 @@
-# 🧬 Pharma Agentic LangGraph
+# Pharma Evidence RAG
 
-A multi-agent system for drug repurposing literature analysis using LangGraph and FastAPI. This prototype demonstrates how AI agents can collaborate to search literature, summarize research papers, and generate comprehensive reports for pharmaceutical repurposing opportunities.
+A research literature workspace using **FastAPI, LangGraph, Qdrant, FastEmbed and React**, with optional Gemini synthesis. Built to demonstrate retrieval engineering, API design, grounded generation and reproducible evaluation.
 
-## 🎯 Project Goal
+**This is a research demonstration, not clinical decision support.** The bundled ten-paper corpus is synthetic. Its numbers and findings are fictional. Import authentic, appropriately licensed abstracts for meaningful research; uploaded text is not independently verified.
 
-Given a drug name and a disease, the system uses multiple agents to:
-- Search literature (mock dataset for demo)
-- Summarize 3-5 key papers using LLM
-- Generate a ranked repurposing summary
-- Produce a structured PDF-style text report
+## Run locally
 
-## 🏗️ Architecture
+Requires Python 3.11+ and Node 22.12+. No database account or paid API key is required.
 
-The system consists of 4 specialized agents orchestrated by LangGraph:
-
-1. **Master Agent**: Plans subtasks and coordinates workflow
-2. **Search Agent**: Fetches relevant papers from mock dataset
-3. **Summarizer Agent**: Uses LLM to summarize each paper for repurposing context
-4. **Reporter Agent**: Aggregates summaries into a final structured report
-
-```
-User Input (Drug + Disease)
-         ↓
-    Master Agent (Planning)
-         ↓
-    Search Agent (Literature Retrieval)
-         ↓
-  Summarizer Agent (LLM Analysis)
-         ↓
-   Report Agent (Final Report)
-         ↓
-    Results Display
-```
-
-## 📁 Project Structure
-
-```
-pharma-agentic-langgraph/
-├── backend/
-│   ├── __init__.py
-│   ├── main.py          # FastAPI entry point
-│   ├── graph.py         # LangGraph workflow definition
-│   ├── tools.py         # Search & summarization tools
-│   └── models.py        # Pydantic models & state
-├── data/
-│   └── mock_papers.json # Curated dataset (10 papers)
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx      # Main React component
-│   │   ├── App.css      # Styling
-│   │   ├── main.jsx     # Entry point
-│   │   └── index.css    # Global styles
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── requirements.txt
-└── README.md
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.9+
-- Node.js 18+
-- Google Gemini API Key
-
-### Backend Setup
-
-1. **Clone and navigate to the project:**
 ```bash
-cd pharma-agentic-langgraph
-```
-
-2. **Create virtual environment:**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. **Install dependencies:**
-```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+uvicorn backend.main:app --reload
 ```
 
-4. **Set Gemini API key:**
-```bash
-export GEMINI_API_KEY='your-api-key-here'
-```
+In another terminal:
 
-5. **Run the backend:**
-```bash
-cd backend
-uvicorn main:app --reload
-```
-
-Backend will be available at: `http://localhost:8000`
-- Interactive API docs: `http://localhost:8000/docs`
-
-### Frontend Setup
-
-1. **Navigate to frontend:**
 ```bash
 cd frontend
-```
-
-2. **Install dependencies:**
-```bash
-npm install
-```
-
-3. **Run development server:**
-```bash
+npm ci
 npm run dev
 ```
 
-Frontend will be available at: `http://localhost:3000`
+Open http://localhost:3000 and API docs at http://localhost:8000/docs. First startup downloads `BAAI/bge-small-en-v1.5` for real semantic embeddings. For a fully offline smoke demo, set `EMBEDDING_BACKEND=hash` before startup: this is a token hashing baseline, **not semantic embedding**. Reports use extractive mode by default; enable Gemini below for abstractive RAG.
 
-## 🧪 Testing the System
+## Architecture
 
-### Option 1: Using the UI (Recommended)
+```mermaid
+flowchart LR
+    UI[React evidence workspace] --> API[FastAPI validation]
+    API --> G[LangGraph]
+    G --> R[Vector retrieval and paper deduplication]
+    R --> Q[(Qdrant)]
+    R --> S[Grounded synthesis or excerpts]
+    S --> C[Citation ID validation]
+    C --> UI
+    I[Authenticated JSON ingestion] --> E[180-word chunks / 30 overlap]
+    E --> F[FastEmbed embeddings]
+    F --> Q
+```
 
-1. Open `http://localhost:3000` in your browser
-2. Enter:
-   - **Drug**: `Metformin`
-   - **Disease**: `Alzheimer's`
-3. Click "Run Analysis"
-4. View the results:
-   - Retrieved papers (cards)
-   - AI-generated summaries (cards)
-   - Final repurposing report
+- Persistent local vector database, or remote Qdrant via environment configuration.
+- Deterministic content IDs make repeated ingestion idempotent. Changed documents are new versions; old versions are retained.
+- Embedding model and chunk schema namespaced collections prevent mixing incompatible vectors.
+- Cosine similarity threshold, source filters, and one highest-ranking passage per paper; up to `top_k * 8` candidates are considered, so highly repetitive documents can reduce returned paper count.
+- Citation IDs and source passages returned with every report. Invalid/missing citation IDs or provider failures trigger an explicit extractive fallback.
+- Empty retrieval abstains rather than calling the model. Similarity is not clinical confidence; citation ID validation does not prove claim support.
+- Real completed-stage timings, request IDs, JSON export, browser print/PDF, and React text rendering (no generated HTML execution).
+- Authenticated ingestion; environment-based secrets; health checks; automated API/storage tests; CI and Docker.
 
-### Option 2: Using FastAPI Swagger UI
+## Optional keys (keep them in `.env`, never chat or Git)
 
-1. Open `http://localhost:8000/docs`
-2. Click on `POST /run`
-3. Click "Try it out"
-4. Enter JSON:
+### Gemini synthesis
+
+1. Open [Google AI Studio API keys](https://aistudio.google.com/apikey), sign in, and create a key in your selected Google project.
+2. Set `GEMINI_API_KEY` in `.env` and `GENERATION_MODE=gemini`.
+3. Restart the backend. Change `GEMINI_MODEL` if your account does not support the configured model.
+
+Retrieved passages and the query are sent to Google when Gemini mode is enabled. Provider errors fall back to excerpts and appear as a warning in the response. The previous repository included an embedded key: revoke it in AI Studio; deleting source text does not remove Git history.
+
+### Qdrant Cloud (optional)
+
+1. Create a cluster in [Qdrant Cloud](https://cloud.qdrant.io/).
+2. Copy its endpoint to `QDRANT_URL` and create/copy a database API key into `QDRANT_API_KEY`.
+3. Restart. Local storage is ignored when a URL is configured. Cloud is useful for multiple API workers; embedded mode requires **one process/worker per storage directory**.
+
+References: [Qdrant FastEmbed integration](https://qdrant.tech/documentation/fastembed/fastembed-semantic-search/), [Gemini generation API](https://ai.google.dev/api/generate-content).
+
+## Import your literature
+
+Generate an ingestion credential and put it in `.env` as `ADMIN_API_KEY`:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Restart the backend, then call `POST /ingest` through Swagger with the `X-API-Key` header. Request shape:
+
 ```json
-{
-  "drug": "Metformin",
-  "disease": "Alzheimer's"
-}
+{"papers":[{"title":"Your actual paper title","abstract":"Paste an appropriately licensed abstract with at least 30 characters.","link":"https://example.org/paper"}]}
 ```
-5. Click "Execute" and view response
 
-### Option 3: Using cURL
+Only HTTP(S) source URLs are accepted. Up to 100 abstracts of 30,000 characters each are accepted per batch. Select **Uploaded literature** in the UI to exclude fictional sources. Re-importing identical text does not duplicate chunks. There is no PDF parser or PubMed live integration in this release.
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Readiness, indexed chunk count and configured modes |
+| `POST /ingest` | Validated paper ingestion; requires `X-API-Key` |
+| `POST /run` | Drug, disease, `top_k` (1–10), source (`all`, `demo`, `uploaded`) |
 
 ```bash
-curl -X POST "http://localhost:8000/run" \
-  -H "Content-Type: application/json" \
-  -d '{"drug": "Metformin", "disease": "Alzheimers"}'
+curl http://localhost:8000/run -H 'Content-Type: application/json' \
+  -d '{"drug":"Metformin","disease":"Alzheimer","top_k":5,"source":"demo"}'
 ```
 
-## 🔧 How It Works
+## Verification and evaluation
 
-### 1. State Management (models.py)
-
-The `GraphState` TypedDict defines the shared state that flows through all agents:
-
-```python
-class GraphState(TypedDict, total=False):
-    drug: str
-    disease: str
-    query: str
-    tasks: List[str]
-    papers: List[Dict]
-    summaries: List[Dict]
-    final_report: str
-```
-
-### 2. Tools (tools.py)
-
-- **`search_mock_papers()`**: Filters mock dataset by drug/disease keywords
-- **`summarize_paper()`**: Uses OpenAI GPT-4o-mini to generate expert summaries
-
-### 3. Agent Workflow (graph.py)
-
-Each node is a Python function that transforms state:
-
-```python
-master_agent() → search_agent() → summarizer_agent() → report_agent()
-```
-
-The graph is compiled into an executable workflow using LangGraph.
-
-### 4. API Layer (main.py)
-
-FastAPI exposes the workflow via REST endpoint with CORS enabled for frontend.
-
-## 📊 Mock Dataset
-
-The `data/mock_papers.json` contains 10 curated papers:
-- 5 papers on Metformin + Alzheimer's
-- 5 papers on other drugs/diseases for variety
-
-Each paper includes:
-- Title
-- Abstract (realistic medical content)
-- Link (mock PubMed URLs)
-
-## 🎨 Frontend Features
-
-- **Clean, modern UI** with gradient design
-- **Loading states** with spinner animation
-- **Card-based layout** for papers and summaries
-- **Formatted report display** with sections
-- **Responsive design** for mobile/desktop
-- **Error handling** with user-friendly messages
-
-## 🔑 Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-GEMINI_API_KEY=your-gemini-key-here
-```
-
-Or export directly:
 ```bash
-export GEMINI_API_KEY='your-gemini-key-here'
+python -m pytest -q
+EMBEDDING_BACKEND=hash python -m scripts.evaluate
+# Real embedding evaluation (downloads model on first use):
+EMBEDDING_BACKEND=fastembed python -m scripts.evaluate
+cd frontend && npm ci && npm run build
 ```
 
-## 📦 Dependencies
+The benchmark reports hit rate@5 and MRR@5 on **three synthetic smoke queries**. These are regression checks, not evidence of general biomedical accuracy. For a serious ML evaluation, curate held-out authentic query/relevance judgments, compare lexical and semantic baselines, and measure retrieval recall and claim entailment separately.
 
-### Backend
-- `fastapi` - Web framework
-- `uvicorn` - ASGI server
-- `google-generativeai` - Google Gemini API client
-- `langgraph` - Agent orchestration
-- `langchain` - LLM framework
-- `pydantic` - Data validation
+## Container deployment
 
-### Frontend
-- `react` - UI library
-- `vite` - Build tool
-- Modern CSS with gradients and animations
+```bash
+cp .env.example .env  # only if you have not configured it already
+docker compose up --build
+```
 
-## 🎯 Example Output
+Docker exposes the API on port 8000 and persists local vectors/model cache. Run the frontend separately or host its `dist` build with `VITE_API_URL` set at build time. Set `CORS_ORIGINS` to your frontend origin. The previous Vercel all-in-one deployment is superseded: embedded vectors require persistent storage and startup may download a model. Use a persistent container backend.
 
-**Input:**
-- Drug: Metformin
-- Disease: Alzheimer's
+Before public deployment add gateway authentication/rate limits for `/run`, request-size limits, HTTPS and provider budgets. The current API is intended for local demos; ingestion auth alone does not make public generation safe from abuse. No multi-tenant isolation, background ingestion queue, or independent factual verifier is claimed.
 
-**Output:**
-1. **Papers Found**: 5 relevant papers
-2. **Summaries**: AI-generated key findings with relevance scores
-3. **Final Report**:
-   - Executive Summary
-   - Evidence Overview
-   - Potential Benefits & Risks
-   - Conclusion (Should this be investigated further?)
+## Resume / interview talking points
 
-## 🚧 Future Enhancements
+- Built a full-stack literature RAG system with LangGraph orchestration, persistent Qdrant indexing and local semantic embeddings.
+- Implemented idempotent chunk ingestion, source-filtered retrieval, citation validation, abstention and graceful provider fallback.
+- Added API/storage integration tests, synthetic retrieval evaluation, CI, Docker packaging and an evidence inspection UI.
 
-- [ ] Real PubMed API integration
-- [ ] PDF export functionality
-- [ ] User authentication
-- [ ] Results caching
-- [ ] More sophisticated ranking algorithms
-- [ ] Clinical trial data integration
-- [ ] Interactive graph visualization
-- [ ] Batch processing for multiple drugs
-
-## 🐛 Troubleshooting
-
-**Issue**: Backend fails to start
-- **Solution**: Ensure all dependencies are installed and Gemini API key is set
-
-**Issue**: Frontend can't connect to backend
-- **Solution**: Check CORS settings and ensure backend is running on port 8000
-
-**Issue**: No papers found
-- **Solution**: Try "Metformin" + "Alzheimer's" which are in the mock dataset
-
-## 📝 License
-
-MIT License - Feel free to use for your hackathon or learning purposes!
-
-## 🤝 Contributing
-
-This is a hackathon prototype. Feel free to fork and enhance!
-
-## 📧 Contact
-
-For questions or feedback, please open an issue on GitHub.
-
----
-
-**Built with ❤️ for pharmaceutical innovation and AI-powered drug repurposing**
+Use measured results from your own real corpus; do not claim clinical accuracy or production scale based on the demo dataset.

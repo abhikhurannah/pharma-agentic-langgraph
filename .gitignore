@@ -52,3 +52,8 @@ build/
 # Build artifacts
 *.egg
 *.whl
+.venv/
+data/qdrant/
+.pytest_cache/
+.env.*
+!.env.example
