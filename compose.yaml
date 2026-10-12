@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    environment:
+      QDRANT_PATH: /app/storage/qdrant
+    volumes:
+      - vectors:/app/storage
+      - models:/home/app/.cache
+volumes:
+  vectors:
+  models:
